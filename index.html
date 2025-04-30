@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>BookSMS Chatroom</title>
+        <script type="importmap">
+            {
+                "imports": {
+                    "vue": "https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.esm-browser.js",
+                    "@graffiti-garden/implementation-local": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-local@0.6.4/dist/browser/index.js",
+                    "@graffiti-garden/implementation-remote": "https://cdn.jsdelivr.net/npm/@graffiti-garden/implementation-remote@0.6.2/dist/browser/index.js",
+                    "@graffiti-garden/wrapper-vue": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-vue@0.7.2/dist/browser/plugin.mjs"
+                }
+            }
+        </script>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+
+    <body>
+        <div id="app">
+            <button v-if="!$graffitiSession.value" @click="$graffiti.login()">
+                Log In
+            </button>
+            <template v-else>
+                <button @click="$graffiti.logout($graffitiSession.value)">
+                    Log Out
+                </button>
+            </template>
+            <nav class="main-nav">
+                <button @click="currentView = 'chats'" class="navButton" :class="{ active: currentView === 'chats' }">
+                  Chats
+                </button>
+                <button @click="currentView = 'search'" class="navButton" :class="{ active: currentView === 'search' }">
+                  Book Search
+                </button>
+                <button @click="currentView = 'community'" class="navButton" :class="{ active: currentView === 'community' }">
+                  Community
+                </button>
+                <button @click="goToProfile" class="navButton" :class="{ active: currentView === 'profile' }">
+                  Profile
+                </button>
+
+                <!-- <button @click="logAll">Refresh and Log designftw Data</button> -->
+              </nav>
+            <h1>BookSMS</h1>
+            
+
+
+            <!-- CHAT VIEWS -->
+
+            <section v-if="currentView === 'chats'">
+                <h2>My Chats</h2>
+
+                <div v-if="isLoadingJoinedGroups">Loading your chats...</div>
+
+                <div v-else-if="!$graffitiSession.value">
+                  <h3>Log in to access your chats</h3>
+                </div>
+              
+                <div v-else>
+                  <div class="chat-filter">
+                    <button
+                      @click="chatFilter = 'all'"
+                      :class="{ active: chatFilter === 'all' }"
+                    >All</button>
+                
+                    <button
+                      @click="chatFilter = 'individuals'"
+                      :class="{ active: chatFilter === 'individuals' }"
+                    >Individuals</button>
+                
+                    <button
+                      @click="chatFilter = 'groups'"
+                      :class="{ active: chatFilter === 'groups' }"
+                    >Groups</button>
+                  </div>
+                  <graffiti-discover
+                    v-slot="{ objects }"
+                    :channels="[userChannel]"
+                    :schema="{
+                      properties: {
+                        value: {
+                          required: ['groupChannel','groupName','joinedAt'],
+                          properties: {
+                            groupChannel: { type: 'string' },
+                            groupName: { type: 'string' },
+                            joinedAt: { type: 'number' },
+                          }
+                        }
+                      }
+                    }"
+                  >
+                    <ul>
+                      <li v-for="o of objects.filter(o =>
+                        chatFilter === 'all'
+                        || (chatFilter==='individuals' && o.value.object.type==='Direct Message')
+                        || (chatFilter==='groups'      && (o.value.object.type==='Group Chat' || o.value.object.type=== 'Custom Chat'))
+                      )"
+                      :key="o.value.groupChannel">
+                        {{ o.value.groupName}} 
+                        <div>
+                          <button @click="selectGroup(o)">Enter Chat</button>
+                          <button @click="leaveGroup(o)" class="exitGroup">Leave chat</button>
+                        </div>
+                        
+                      </li>
+                    </ul>
+                  </graffiti-discover>
+                </div>
+            </section>
+            
+            <!-- Book Search view -->
+            <section v-else-if="currentView === 'search'">
+              <h2>Book Search</h2>
+              <div v-if="!$graffitiSession.value">
+                <h3>log in to access content</h3>
+              </div>
+              <div v-else>
+                <graffiti-discover v-slot="{ objects }" :channels="['booksms:catalog']" :schema="{}">
+                  <ul class="book-list">
+                    <li v-for="o of objects" class="book-item">
+                      <div class="book-info">
+                        <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-thumbnail" alt="Book cover">
+                        <div class="book-details">
+                          <span class="book-title">{{o.value.object.bookTitle}}</span>
+                          <span class="book-rating">{{o.value.object.bookRating + '⭐️'}}</span>
+                        </div>
+                      </div>
+                      <button @click="selectBook(o)">see book</button>
+                    </li>
+                  </ul>
+                </graffiti-discover>
+              </div>
+            </section>
+            
+            <!-- Community view -->
+            <section v-else-if="currentView === 'community'">
+              <h2>Community</h2>
+              <div v-if="!$graffitiSession.value">
+                <h3>Log in to access content</h3>
+              </div>
+              
+              <div v-else>
+                <div class="community-tabs">
+                  <button @click="communityTab = 'books'" :class="{ active: communityTab === 'books' }">Book Chats</button>
+                  <button @click="communityTab = 'users'" :class="{ active: communityTab === 'users' }">Users</button>
+                </div>
+                
+                <!-- Users in app-->
+                <div v-if="communityTab === 'users'" class="users-list">
+                  <h3>BookSMS Users</h3>
+                  
+                  <div v-if="users.length === 0" class="no-results">
+                    <p>No other users found.</p>
+                  </div>
+                  
+                  <ul v-else class="users-grid">
+                    <li v-for="user in users" :key="user.actor" class="user-card" @click="viewUserProfile_func(user.actor)">
+                      <div class="user-card-header">
+                        <img src="profile.png" class="user-avatar" alt="User avatar" width="40px">
+                        <div class="user-card-info">
+                          <h4>{{ user.profile.username }}</h4>
+                          <p v-if="user.profile.pronouns" class="user-pronouns">{{ user.profile.pronouns }}</p>
+                          <div class="follow-stats small">
+                            <span>{{ followersCount[user.actor] || 0 }} Followers</span> · 
+                            <span>{{ followingCount[user.actor] || 0 }} Following</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <p class="user-bio">{{ user.profile.bio || "No bio available." }}</p>
+                      
+                      <div class="user-actions">
+                        <follow-button
+                          @click.stop
+                          :user-actor="user.actor"
+                          :current-user-actor="$graffitiSession.value?.actor"
+                          :is-following-function="isFollowing"
+                          :follow-function="followUser"
+                          :unfollow-function="unfollowUser"
+                        />
+                        <button @click="startDirectMessage(user)">Message</button>
+                        <!-- <button @click="deleteMessage($graffitiSession.value, user.url)">delete</button> -->
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+                
+                <!-- Books in app -->
+                <div v-if="communityTab === 'books'">
+                  <graffiti-discover
+                    v-slot="{ objects }"
+                    :channels="['booksms:catalog:chats']"
+                    :schema="{}"
+                  >
+                    <ul>
+                      <li v-for="g of objects">
+                        <span>{{ g.value.object.bookTitle +' - ' + g.value.object.category }}</span>
+                        <div>
+                          <button
+                            @click="joinGroup(g)"
+                            :disabled="isJoinedGroup(g.value.object.channel)"
+                          >
+                            {{ isJoinedGroup(g.value.object.channel) ? 'Joined' : 'Join' }}
+                          </button>
+                          <button v-if="isJoinedGroup(g.value.object.channel)" @click="selectGroup(g)">Enter Chat</button>
+                        </div>
+                      </li>
+                    </ul>
+                  </graffiti-discover>
+                </div>
+              </div>
+            </section>
+            
+            <!-- Profile view -->
+            <section v-else-if="currentView === 'profile'">
+              <h2>My Profile</h2>
+            
+              <div v-if="!$graffitiSession.value">
+                <h3>Log in to access profile</h3>
+              </div>
+            
+              <div v-else-if="userProfile" class="user-profile">
+                
+                <div class="profile-header">
+                  <img src="profile.png" class="profile-image" alt="Profile image" width="40px">
+                  <div class="profile-info">
+                    <h3>{{ userProfile.username }}</h3>
+                    <p v-if="userProfile.pronouns">{{ userProfile.pronouns }}</p>
+                    <p>Joined: {{ new Date(userProfile.joinedAt).toLocaleDateString() }}</p>
+                    <button @click="editProfile = true" v-if="!editProfile">Edit Profile</button>
+                  </div>
+                </div>
+            
+                
+                <div class="user-stats">
+                  <h4>Connections & Chats</h4>
+                  <div class="follow-stats">
+                    <div class="stat-button" @click="viewChats(userChannel)" role="button" tabindex="0">
+                      <strong>{{ Array.from(joinedGroupRecords).length }}</strong> Book chats
+                    </div>
+                    <div class="stat-button" @click="viewFollows('followers', {actor: userChannel})" role="button" tabindex="0">
+                      <strong>{{ followersCount[userChannel] || 0 }}</strong> Followers
+                    </div>
+                    <div class="stat-button" @click="viewFollows('following', {actor: userChannel})" role="button" tabindex="0">
+                      <strong>{{ followingCount[userChannel] || 0 }}</strong> Following
+                    </div>
+                  </div>
+                </div>
+            
+                
+                <div class="profile-bio">
+                  <h4>About Me</h4>
+                  <p>{{ userProfile.bio || "No bio yet." }}</p>
+                </div>
+            
+                
+                <div class="profile-edit">
+                  <form v-if="editProfile" @submit.prevent="updateUserProfile(); editProfile = false" class="edit-profile-form">
+                    <div class="form-group">
+                      <label for="edit-username">Username</label>
+                      <input type="text" id="edit-username" v-model="userProfile.username" disabled>
+                    </div>
+            
+                    <div class="form-group">
+                      <label for="edit-pronouns">Pronouns</label>
+                      <input type="text" id="edit-pronouns" v-model="userProfile.pronouns">
+                    </div>
+            
+                    <div class="form-group">
+                      <label for="edit-bio">Bio</label>
+                      <textarea id="edit-bio" v-model="userProfile.bio"></textarea>
+                    </div>
+            
+                    <div class="form-actions">
+                      <button type="button" @click="editProfile = false">Cancel</button>
+                      <button type="submit">Save Changes</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </section>
+
+            <!-- chat view of a specific book -->
+            <section v-if="currentView === 'chatRoom'">
+              <div class="chat-header">
+                <button @click="goBack">← Back</button>
+                <h2>{{ selectedGroup ? selectedGroup.value.object.name : 'Chat' }}</h2>
+                <button @click="showChatMembers = !showChatMembers" class="members-toggle">
+                  {{ showChatMembers ? 'Hide Members' : 'Show Members' }} ({{ chatMembers.length }})
+                </button>
+              </div>
+              
+              <!-- members that are part of the chat view -->
+              <div v-if="showChatMembers" class="chat-members-panel">
+                <h3>Chat Members</h3>
+                <ul class="members-list">
+                  <li v-for="member in chatMembers" :key="member.actor" class="member-item" @click="viewUserProfile_func(member.actor)">
+                    <div class="member-info">
+                      <img src="profile.png" class="member-avatar" width="40px">
+                      <span class="member-name">{{ member.profile?.username || member.actor }}</span>
+                    </div>
+                    <follow-button
+                      @click.stop
+                      :user-actor="member.actor"
+                      :current-user-actor="$graffitiSession.value?.actor"
+                      :is-following-function="isFollowing"
+                      :follow-function="followUser"
+                      :unfollow-function="unfollowUser"
+                    />
+                  </li>
+                </ul>
+              </div>
+                
+                <div class="message-container">
+                  <graffiti-discover
+                    v-slot="{ objects: messageObjects, isInitialPolling }"
+                    :channels="[myMessageChannel]"
+                    :schema="{
+                      properties: {
+                        value: {
+                          required: ['content', 'published'],
+                          properties: {
+                            content: { type: 'string' },
+                            published: { type: 'number' }
+                          }
+                        }
+                      }
+                    }"
+                  >
+                    <p v-if="isInitialPolling">Loading messages...</p>
+                    <ul v-else-if="messageObjects.length > 0" class="messages-list">
+                      <li
+                        v-for="message of messageObjects.sort((a, b) => a.value.published - b.value.published)"
+                        :key="message.url"
+                        :class="{
+                          'my-message': message.actor === $graffitiSession.value?.actor,
+                          'other-message': message.actor !== $graffitiSession.value?.actor
+                        }"
+                      >
+                        <div class="message-info">
+                          <strong>{{ message.actor === $graffitiSession.value?.actor ? 'You' : message.actor }}</strong>
+                          <span class="message-time">{{ formatTime(message.value.published) }}</span>
+                        </div>
+                        <div class="message-content">{{ message.value.content }}</div>
+                        
+                        <div v-if="message.actor === $graffitiSession.value?.actor" class="message-actions">
+                          <button @click="editMessagePrompt(message)">Edit</button>
+                          <button @click="deleteMessage($graffitiSession.value, message)">Delete</button>
+                        </div>
+                      </li>
+                    </ul>
+                    <p v-else>No messages yet. Be the first to start the conversation!</p>
+                  </graffiti-discover>
+                </div>
+                
+                <form @submit.prevent="sendMessage($graffitiSession.value)" class="message-form">
+                  <fieldset :disabled="sending">
+                    <input
+                      type="text"
+                      v-model="myMessage"
+                      placeholder="Type a message..."
+                      ref="messageInput"
+                    />
+                    <button type="submit">
+                      {{ sending ? 'Sending...' : 'Send' }}
+                    </button>
+                  </fieldset>
+                </form>
+          </section>
+          
+             <!-- book Room -->
+          <section v-else-if="currentView === 'bookRoom'">
+              <div class="chat-header">
+                <button @click="goBack">← Back</button>
+              </div>
+              <graffiti-discover v-slot="{ objects }" :channels="['booksms:catalog']" :schema="{}">
+                <div v-for="o of objects.filter(o => o.value.object.bookId === currentBook)" class="book-detail">
+                  <div class="book-header">
+                    <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-cover" alt="Book cover">
+                    <div class="book-header-info">
+                      <h2>{{o.value.object.bookTitle}}</h2>
+                      <h3>{{o.value.object.bookRating + '⭐️'}}</h3>
+                    </div>
+                  </div>
+                  <p class="book-plot">{{o.value.object.bookPlot}}</p>
+                  <button @click="selectBookChats()">see book chats</button>
+                </div>
+              </graffiti-discover>
+          </section>
+
+            
+
+            <!-- book specific chat list -->
+          <section v-else-if="currentView === 'bookChatsListRoom'">
+              <div class="chat-header">
+                <button @click="goBack">← Back</button>
+                <button @click="addBookSpecificChat">add book chat</button>
+              </div>
+                <graffiti-discover
+                    v-slot="{ objects }"
+                    :channels="['booksms:catalog:chats']"
+                    :schema="{}"
+                  >
+                  
+                   <ul>
+                    <li v-for="o of objects.filter(o => o.value.object.bookId === currentBook)">
+                      <div class="chat-info">
+                        <span>{{ o.value.object.bookTitle +' - ' + o.value.object.category }}</span>
+                      
+                      </div>
+                    
+                      <div class="chat-actions">
+                        <button
+                          @click="joinGroup(o)"
+                          :disabled="isJoinedGroup(o.value.object.channel)"
+                        >
+                          {{ isJoinedGroup(o.value.object.channel) ? 'Joined' : 'Join' }}
+                        </button>
+                        <button v-if="isJoinedGroup(o.value.object.channel)" @click="selectGroup(o)">Enter Chat</button>
+                      </div>
+                    </li>
+                  </ul>
+                </graffiti-discover>
+          </section>
+
+
+            <!-- add book specific chat -->
+            <section v-else-if="currentView === 'addBookChat'">
+              <div class="chat-header">
+                <button @click="goBack">← Back</button>
+              </div>
+            
+              <div class="add-chat-form">
+                <h3>Create New Chat for This Book</h3>
+                <form @submit.prevent="createBookSpecificChat">
+                  <label>
+                    Chat Name:
+                    <input type="text" v-model="newChatName" placeholder="e.g. 'fav memes from __ book'">
+                  </label>
+                  <button type="submit">Create</button>
+                </form>
+              </div>
+            </section>
+
+            <!-- Registration view for first-time users -->
+          <section v-if="currentView === 'registration'">
+            <h2>Welcome to BookSMS!</h2>
+            <p>Please create your profile to continue.</p>
+            
+            <form @submit.prevent="registerUser($graffitiSession.value)" class="registration-form">
+              <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" v-model="newUserForm.username" disabled>
+              </div>
+              
+              <div class="form-group">
+                <label for="pronouns">Pronouns</label>
+                <input type="text" id="pronouns" v-model="newUserForm.pronouns" placeholder="e.g. they/them, she/her, he/him">
+              </div>
+              
+              <div class="form-group">
+                <label for="bio">Bio</label>
+                <textarea id="bio" v-model="newUserForm.bio" placeholder="Tell us a bit about yourself..."></textarea>
+              </div>
+              
+              <button type="submit" class="submit-btn">Create Profile</button>
+            </form>
+          </section>
+
+          <!-- Followers/Following list view -->
+          <section v-else-if="currentView === 'follows'">
+            <div class="chat-header">
+              <button @click="goBack">← Back</button>
+              <h2>{{ followListType === 'followers' ? 'Followers' : 'Following' }}</h2>
+            </div>
+            
+            <div class="follows-list">
+              <div v-if="followListType === 'followers'" class="followers-container">
+                <p v-if="(followersCount[followListUser.actor] || 0) === 0">
+                  {{ followListUser.actor === userChannel ? "You don't" : "This user doesn't" }} have any followers yet.
+                </p>
+                
+                <ul v-else class="users-grid">
+                  <li v-for="user in getFollowersList(followListUser.actor)" class="user-card" @click="viewUserProfile_func(user.actor)">
+                    <div class="user-card-header">
+                      <img src="profile.png" class="user-avatar" alt="User avatar" width="40px">
+                      <div class="user-card-info">
+                        <h4>{{ getUsernameForActor(user.actor) }}</h4>
+                      </div>
+                    </div>
+                    
+                    <div class="user-actions">
+                      <follow-button
+                      @click.stop
+                      :user-actor="user.actor"
+                      :current-user-actor="$graffitiSession.value?.actor"
+                      :is-following-function="isFollowing"
+                      :follow-function="followUser"
+                      :unfollow-function="unfollowUser"
+                      />
+                    </div>
+                  </li>
+                </ul>
+              </div>
+              
+              <div v-else class="following-container">
+                <graffiti-discover
+                    v-slot="{ objects }"
+                    :channels="[`${followListUser.actor}:follows`]"
+                    :schema="{}"
+                  >
+                  <p v-if="objects.length === 0">
+                    {{ followListUser.actor === userChannel ? "You aren't" : "This user isn't" }} following anyone yet.
+                  </p>
+                  
+                  <ul v-else >
+                    <li v-for="follow in objects" class="user-card" @click="viewUserProfile_func(follow?.value?.followedActor)">
+                    
+                      <div class="user-card-header">
+                        <img src="profile.png" class="user-avatar" alt="User avatar" width="40px">
+                        <div class="user-card-info">
+                          <h4>{{ getUsernameForActor(follow?.value?.followedActor) }}</h4>
+                        </div>
+                      </div>
+                      
+                      <div class="user-actions">
+                        <button 
+                          v-if="follow.value.followedActor !== userChannel"
+                          @click="isFollowing(follow?.value?.followedActor) ? unfollowUser(follow?.value?.followedActor) : followUser(follow?.value?.followedActor)"
+                          :class="{ 'following': isFollowing(follow?.value?.followedActor) }"
+                        >
+                          {{ isFollowing(follow?.value?.followedActor) ? 'Following' : 'Follow' }}
+                        </button>
+                      </div>
+                    </li>
+                  </ul>
+                </graffiti-discover>
+              </div>
+            </div>
+          </section>
+
+          <section v-else-if="currentView == 'viewChats'">
+                  <button @click="goBack">← Back</button>
+            
+                  <graffiti-discover
+                    v-slot="{ objects }"
+                    :channels="[chatListUser]"
+                    :schema="{
+                      properties: {
+                        value: {
+                          required: ['groupChannel','groupName','joinedAt'],
+                          properties: {
+                            groupChannel: { type: 'string' },
+                            groupName: { type: 'string' },
+                            joinedAt: { type: 'number' },
+                          }
+                        }
+                      }
+                    }"
+                  >
+                    <ul>
+                      <li v-for="o of objects.filter(o =>
+                        chatFilter === 'all'
+                        || (chatFilter==='individuals' && o.value.object.type==='Direct Message')
+                        || (chatFilter==='groups'      && (o.value.object.type==='Group Chat' || o.value.object.type=== 'Custom Chat'))
+                      )"
+                      :key="o.value.groupChannel">
+                        {{ o.value.groupName}} 
+                        <div>
+                          <button
+                            @click="joinGroup(o)"
+                            :disabled="isJoinedGroup(o.value.object.channel)"
+                          >
+                            {{ isJoinedGroup(o.value.object.channel) ? 'Joined' : 'Join' }}
+                          </button>
+                          <button v-if="isJoinedGroup(o.value.object.channel)" @click="selectGroup(o)">Enter Chat</button>
+                        </div>
+                        
+                      </li>
+                    </ul>
+                  </graffiti-discover>
+
+          </section>
+
+          <!-- User profile view -->
+          <section v-else-if="currentView == 'viewUserProfile'">
+            <div v-if="!$graffitiSession.value">
+              <h3>Log in to access profile</h3>
+            </div>
+          
+            <div v-else-if="viewedUserProfile" class="user-profile">
+              <h2>User Profile</h2>
+              <div>
+                <button @click="goBack">← Back</button>
+              </div>
+          
+              
+              <div class="profile-header">
+                <img src="profile.png" class="profile-image" alt="Profile image" width="40px">
+                <div class="profile-info">
+                  <h3>{{ viewedUserProfile?.username }}</h3>
+                  <p v-if="viewedUserProfile?.pronouns">{{ viewedUserProfile?.pronouns }}</p>
+                  <follow-button
+                    @click.stop
+                    :user-actor="viewedUserProfile?.actor"
+                    :current-user-actor="$graffitiSession.value?.actor"
+                    :is-following-function="isFollowing"
+                    :follow-function="followUser"
+                    :unfollow-function="unfollowUser"
+                  />
+                </div>
+              </div>
+          
+             
+              <div class="user-stats">
+                <h4>Connections & Chats</h4>
+                <div class="follow-stats">
+                  <div class="stat-button" @click="viewChats(viewedUserProfile?.actor)" role="button" tabindex="0">
+                    <strong>{{ viewedUserProfileChatCount }}</strong> Book chats
+                  </div>
+                  <div class="stat-button" @click="viewFollows('followers', {actor: viewedUserProfile?.actor})" role="button" tabindex="0">
+                    <strong>{{ followersCount[viewedUserProfile?.actor] || 0 }}</strong> Followers
+                  </div>
+                  <div class="stat-button" @click="viewFollows('following', {actor: viewedUserProfile?.actor})" role="button" tabindex="0">
+                    <strong>{{ followingCount[viewedUserProfile?.actor] || 0 }}</strong> Following
+                  </div>
+                </div>
+              </div>
+          
+            
+              <div class="profile-bio">
+                <h4>About</h4>
+                <p>{{ viewedUserProfile?.bio || "No bio yet." }}</p>
+              </div>
+            </div>
+          </section>
+
+
+        </div>
+
+        <script src="index.js" type="module"></script>
+    </body>
+</html>

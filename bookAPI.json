@@ -1,0 +1,24 @@
+[
+    {
+      "bookId": "9780439023481",
+      "bookTitle": "The Hunger Games",
+      "bookImg": "https://covers.openlibrary.org/b/isbn/9780439023481-L.jpg",
+      "bookPlot": "Panem is a dystopian nation where a totalitarian Capitol forces each district to send two 'tributes' to fight to the death in the annual Hunger Games. Sixteen‑year‑old Katniss Everdeen volunteers in place of her sister, navigates deadly alliances, and must rely on her wits and archery skills to survive while challenging the oppressive Capitol.",  
+      "bookRating": 4.34
+    },
+    {
+      "bookId": "9780062024039",
+      "bookTitle": "Divergent",
+      "bookImg": "https://covers.openlibrary.org/b/isbn/9780062024039-L.jpg",
+      "bookPlot": "In a post‑apocalyptic Chicago, society is divided into five factions based on virtues. Sixteen‑year‑old Beatrice 'Tris' Prior discovers she is Divergent—unsuited to any one group—and leaves her family's faction to join the Dauntless warriors. There she faces brutal initiation trials, uncovers a sinister faction conspiracy, and forms a vital alliance with instructor Tobias 'Four' Eaton.",  
+      "bookRating": 4.14
+    },
+    {
+      "bookId": "9780385737944",
+      "bookTitle": "The Maze Runner",
+      "bookImg": "https://covers.openlibrary.org/b/isbn/9780385737944-L.jpg",
+      "bookPlot": "Thomas wakes up in a mysterious Glade with no memories other than his name, surrounded by teenage boys trapped within a giant, ever‑shifting maze inhabited by deadly Griever creatures. As new arrivals break the Gladers' long‑held rituals, Thomas joins the runners, races through the changing corridors, and works to unravel the maze’s deadly secrets to free them all.",  
+      "bookRating": 4.05
+    }
+  ]
+  
