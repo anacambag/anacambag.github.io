@@ -902,6 +902,11 @@ createApp({
         console.error(`Failed to get chat count for ${actor}:`, err);
       }
       return count;
+    },
+
+    async handleLogout() {
+      await this.$graffiti.logout(this.$graffitiSession.value);
+      location.reload(); 
     }
 
     

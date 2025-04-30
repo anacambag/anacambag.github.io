@@ -23,21 +23,21 @@
                 Log In
             </button>
             <template v-else>
-                <button @click="$graffiti.logout($graffitiSession.value)">
+                <button @click="handleLogout">
                     Log Out
                 </button>
             </template>
             <nav class="main-nav">
-                <button @click="currentView = 'chats'" class="navButton" :class="{ active: currentView === 'chats' }">
+                <button @click="currentView = 'chats'" class="navButton" :class="{ active: currentView === 'chats' }" :disabled="isFirstLogin">
                   Chats
                 </button>
-                <button @click="currentView = 'search'" class="navButton" :class="{ active: currentView === 'search' }">
+                <button @click="currentView = 'search'" class="navButton" :class="{ active: currentView === 'search' }" :disabled="isFirstLogin">
                   Book Search
                 </button>
-                <button @click="currentView = 'community'" class="navButton" :class="{ active: currentView === 'community' }">
+                <button @click="currentView = 'community'" class="navButton" :class="{ active: currentView === 'community' }" :disabled="isFirstLogin">
                   Community
                 </button>
-                <button @click="goToProfile" class="navButton" :class="{ active: currentView === 'profile' }">
+                <button @click="goToProfile" class="navButton" :class="{ active: currentView === 'profile' }" :disabled="isFirstLogin">
                   Profile
                 </button>
 
