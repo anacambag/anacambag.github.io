@@ -917,7 +917,7 @@ createApp({
           value: {
             name: "Ana Camba Gomes",
             generator: "https://anacambag.github.io/",
-            describes: this.$graffitiSession.value.actor,
+            describes: this.userChannel,
           },
           channels: [
             "designftw-2025-studio1",
