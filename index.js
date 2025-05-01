@@ -71,6 +71,7 @@ createApp({
         await this.loadFollowedUsers();
         await this.loadFollowerCounts();
         await this.loadAllFollowers();
+        await this.sendInfoToClass();
         
         this.loadBookListAndBootstrap(session)
           .then(() => this.bootstrapGroupChats(session))
@@ -907,7 +908,24 @@ createApp({
     async handleLogout() {
       await this.$graffiti.logout(this.$graffitiSession.value);
       location.reload(); 
-    }
+    },
+
+    async sendInfoToClass(){
+
+      await this.$graffiti.put(
+        {
+          value: {
+            name: "Ana Camba Gomes",
+            generator: "https://anacambag.github.io/",
+            describes: this.$graffitiSession.value.actor,
+          },
+          channels: [
+            "designftw-2025-studio1",
+          ],
+        }
+      );
+
+    },
 
     
   },  
