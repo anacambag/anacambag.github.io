@@ -922,7 +922,8 @@ createApp({
           channels: [
             "designftw-2025-studio1",
           ],
-        }
+        },
+        this.$graffitiSession.value
       );
 
     },
