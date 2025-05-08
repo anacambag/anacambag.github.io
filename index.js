@@ -1077,7 +1077,7 @@ createApp({
 })
   .component('follow-button', FollowButton)
   .use(GraffitiPlugin, {
-    graffiti: new GraffitiLocal(),
-    // graffiti: new GraffitiRemote(),
+    // graffiti: new GraffitiLocal(),
+    graffiti: new GraffitiRemote(),
   })
   .mount("#app");
