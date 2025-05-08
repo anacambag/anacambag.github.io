@@ -44,6 +44,7 @@
                 <!-- <button @click="logAll">Refresh and Log designftw Data</button> -->
               </nav>
             <h1>BookSMS</h1>
+            <!-- <div id="wave"></div> -->
             
 
 
@@ -98,10 +99,12 @@
                         || (chatFilter==='groups'      && (o.value.object.type==='Group Chat' || o.value.object.type=== 'Custom Chat'))
                       )"
                       :key="o.value.groupChannel">
+                      <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-thumbnail" alt="Book cover" />
+                      <img v-if="o.value.object.type==='Direct Message'" src="profile.png" class="user-avatar" alt="User avatar" width="40px">
                         {{ o.value.groupName}} 
                         <div>
                           <button @click="selectGroup(o)">Enter Chat</button>
-                          <button @click="leaveGroup(o)" class="exitGroup">Leave chat</button>
+                          <button @click="leaveGroup(o)" class="exitGroup" v-if="o.value.object.type==='Group Chat' || o.value.object.type=== 'Custom Chat'">Leave chat</button>
                         </div>
                         
                       </li>
@@ -117,20 +120,28 @@
                 <h3>log in to access content</h3>
               </div>
               <div v-else>
-                <graffiti-discover v-slot="{ objects }" :channels="['booksms:catalog']" :schema="{}">
-                  <ul class="book-list">
-                    <li v-for="o of objects" class="book-item">
-                      <div class="book-info">
-                        <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-thumbnail" alt="Book cover">
-                        <div class="book-details">
-                          <span class="book-title">{{o.value.object.bookTitle}}</span>
-                          <span class="book-rating">{{o.value.object.bookRating + '⭐️'}}</span>
-                        </div>
+                <div class="book-search-form">
+                  <input
+                    type="text"
+                    v-model="googleBooksQuery"
+                    @input="fetchBooksFromGoogleAPI"
+                    placeholder="Search books (via Google Books API)"
+                  />
+                </div>
+                
+                
+                <ul class="book-list">
+                  <li v-for="book in books_API" :key="book.bookId" class="book-item">
+                    <div class="book-info">
+                      <img v-if="book.bookImg" :src="book.bookImg" class="book-thumbnail" alt="Book cover">
+                      <div class="book-details">
+                        <span class="book-title">{{ book.bookTitle }}</span>
+                        <span class="book-rating">{{ book.bookRating + '⭐️' }}</span>
                       </div>
-                      <button @click="selectBook(o)">see book</button>
-                    </li>
-                  </ul>
-                </graffiti-discover>
+                    </div>
+                    <button @click="selectFetchedBook(book)">see book</button>
+                  </li>
+                </ul>
               </div>
             </section>
             
@@ -148,68 +159,77 @@
                 </div>
                 
                 <!-- Users in app-->
-                <div v-if="communityTab === 'users'" class="users-list">
-                  <h3>BookSMS Users</h3>
+                <transition name="slide-right" mode="out-in">
                   
-                  <div v-if="users.length === 0" class="no-results">
-                    <p>No other users found.</p>
-                  </div>
-                  
-                  <ul v-else class="users-grid">
-                    <li v-for="user in users" :key="user.actor" class="user-card" @click="viewUserProfile_func(user.actor)">
-                      <div class="user-card-header">
-                        <img src="profile.png" class="user-avatar" alt="User avatar" width="40px">
-                        <div class="user-card-info">
-                          <h4>{{ user.profile.username }}</h4>
-                          <p v-if="user.profile.pronouns" class="user-pronouns">{{ user.profile.pronouns }}</p>
-                          <div class="follow-stats small">
-                            <span>{{ followersCount[user.actor] || 0 }} Followers</span> · 
-                            <span>{{ followingCount[user.actor] || 0 }} Following</span>
+                  <div v-if="communityTab === 'users'" class="users-list">
+                    <h3>BookSMS Users</h3>
+                    
+                    <div v-if="users.length === 0" class="no-results">
+                      <p>No other users found.</p>
+                    </div>
+                    
+                    <ul v-else class="users-grid">
+                      <li v-for="user in users" :key="user.actor" class="user-card" @click="viewUserProfile_func(user.actor)">
+                        <div class="user-card-header">
+                          <img src="profile.png" class="user-avatar" alt="User avatar" width="40px">
+                          <div class="user-card-info">
+                            <h4>{{ user.profile.name }}</h4>
+                            <p v-if="user.profile.username" class="user-pronouns">@{{ user.profile.username }}</p>
+                            <p v-if="user.profile.pronouns" class="user-pronouns">{{ user.profile.pronouns }}</p>
+                            <div class="follow-stats small">
+                              <span>{{ followersCount[user.actor] || 0 }} Followers</span> · 
+                              <span>{{ followingCount[user.actor] || 0 }} Following</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      <p class="user-bio">{{ user.profile.bio || "No bio available." }}</p>
-                      
-                      <div class="user-actions">
-                        <follow-button
-                          @click.stop
-                          :user-actor="user.actor"
-                          :current-user-actor="$graffitiSession.value?.actor"
-                          :is-following-function="isFollowing"
-                          :follow-function="followUser"
-                          :unfollow-function="unfollowUser"
-                        />
-                        <button @click="startDirectMessage(user)">Message</button>
-                        <!-- <button @click="deleteMessage($graffitiSession.value, user.url)">delete</button> -->
-                      </div>
-                    </li>
-                  </ul>
-                </div>
-                
-                <!-- Books in app -->
-                <div v-if="communityTab === 'books'">
-                  <graffiti-discover
-                    v-slot="{ objects }"
-                    :channels="['booksms:catalog:chats']"
-                    :schema="{}"
-                  >
-                    <ul>
-                      <li v-for="g of objects">
-                        <span>{{ g.value.object.bookTitle +' - ' + g.value.object.category }}</span>
-                        <div>
-                          <button
-                            @click="joinGroup(g)"
-                            :disabled="isJoinedGroup(g.value.object.channel)"
-                          >
-                            {{ isJoinedGroup(g.value.object.channel) ? 'Joined' : 'Join' }}
-                          </button>
-                          <button v-if="isJoinedGroup(g.value.object.channel)" @click="selectGroup(g)">Enter Chat</button>
+                        
+                        <p class="user-bio">{{ user.profile.bio || "No bio available." }}</p>
+                        
+                        <div class="user-actions">
+                          <follow-button
+                            @click.stop
+                            :user-actor="user.actor"
+                            :current-user-actor="$graffitiSession.value?.actor"
+                            :is-following-function="isFollowing"
+                            :follow-function="followUser"
+                            :unfollow-function="unfollowUser"
+                          />
                         </div>
+                        <!-- <button @click="startDirectMessage(user)">Message</button>
+                        <button @click="deleteMessage($graffitiSession.value, user.url)">delete</button> -->
                       </li>
                     </ul>
-                  </graffiti-discover>
-                </div>
+                  </div>
+                </transition>
+
+                <transition name="slide-left" mode="out-in">      
+                    <!-- Books in app -->
+                  <div v-if="communityTab === 'books'">
+                    
+                    <graffiti-discover
+                      v-slot="{ objects }"
+                      :channels="['booksms:catalog:chats']"
+                      :schema="{}"
+                    >
+                      <ul>
+                        <li v-for="g of objects">
+                          <img v-if="g.value.object.bookImg" :src="g.value.object.bookImg" class="book-thumbnail" alt="Book cover" />
+                          <span>{{ g.value.object.bookTitle +' - ' + g.value.object.category }}</span>
+                          <div>
+                            <button
+                              @click="joinGroup(g)"
+                              :disabled="isJoinedGroup(g.value.object.channel)"
+                            >
+                              {{ isJoinedGroup(g.value.object.channel) ? 'Joined' : 'Join' }}
+                            </button>
+                            <button v-if="isJoinedGroup(g.value.object.channel)" @click="selectGroup(g)">Enter Chat</button>
+                          </div>
+                        </li>
+                      </ul>
+                    </graffiti-discover>
+                  </div>
+                </transition>
+
               </div>
             </section>
             
@@ -226,9 +246,10 @@
                 <div class="profile-header">
                   <img src="profile.png" class="profile-image" alt="Profile image" width="40px">
                   <div class="profile-info">
-                    <h3>{{ userProfile.username }}</h3>
+                    <h3>{{ userProfile.name }}</h3>
+                    <p v-if="userProfile.username">@{{ userProfile.username }}</p>
                     <p v-if="userProfile.pronouns">{{ userProfile.pronouns }}</p>
-                    <p>Joined: {{ new Date(userProfile.joinedAt).toLocaleDateString() }}</p>
+                    <!-- <p>Joined: {{ new Date(userProfile.joinedAt).toLocaleDateString() }}</p> -->
                     <button @click="editProfile = true" v-if="!editProfile">Edit Profile</button>
                   </div>
                 </div>
@@ -261,6 +282,11 @@
                     <div class="form-group">
                       <label for="edit-username">Username</label>
                       <input type="text" id="edit-username" v-model="userProfile.username" disabled>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="edit-name">Full Name</label>
+                      <input type="text" id="edit-name" v-model="userProfile.name" >
                     </div>
             
                     <div class="form-group">
@@ -299,7 +325,7 @@
                   <li v-for="member in chatMembers" :key="member.actor" class="member-item" @click="viewUserProfile_func(member.actor)">
                     <div class="member-info">
                       <img src="profile.png" class="member-avatar" width="40px">
-                      <span class="member-name">{{ member.profile?.username || member.actor }}</span>
+                      <span class="member-name">{{ member.profile?.name || member.actor }}</span>
                     </div>
                     <follow-button
                       @click.stop
@@ -398,31 +424,44 @@
                 <button @click="goBack">← Back</button>
                 <button @click="addBookSpecificChat">add book chat</button>
               </div>
-                <graffiti-discover
-                    v-slot="{ objects }"
-                    :channels="['booksms:catalog:chats']"
-                    :schema="{}"
-                  >
-                  
-                   <ul>
-                    <li v-for="o of objects.filter(o => o.value.object.bookId === currentBook)">
-                      <div class="chat-info">
-                        <span>{{ o.value.object.bookTitle +' - ' + o.value.object.category }}</span>
-                      
-                      </div>
-                    
-                      <div class="chat-actions">
-                        <button
-                          @click="joinGroup(o)"
-                          :disabled="isJoinedGroup(o.value.object.channel)"
-                        >
-                          {{ isJoinedGroup(o.value.object.channel) ? 'Joined' : 'Join' }}
-                        </button>
-                        <button v-if="isJoinedGroup(o.value.object.channel)" @click="selectGroup(o)">Enter Chat</button>
-                      </div>
-                    </li>
-                  </ul>
-                </graffiti-discover>
+              <graffiti-discover
+              v-slot="{ objects }"
+              :channels="['booksms:catalog:chats']"
+              :schema="{}"
+            >
+              <ul>
+                <li v-for="o of objects.filter(o => o.value.object.bookId === currentBook)">
+                  <div class="chat-info">
+                    <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-thumbnail" alt="Book cover" />
+                    <span>{{ o.value.object.bookTitle +' - ' + o.value.object.category }}</span>
+                  </div>
+                  <div class="chat-actions">
+                    <button
+                      @click="joinGroup(o)"
+                      :disabled="isJoinedGroup(o.value.object.channel)"
+                    >
+                      {{ isJoinedGroup(o.value.object.channel) ? 'Joined' : 'Join' }}
+                    </button>
+                    <button v-if="isJoinedGroup(o.value.object.channel)" @click="selectGroup(o)">Enter Chat</button>
+                  </div>
+                </li>
+                <li
+                  v-for="cat in getMissingBookChats(objects)"
+                  :key="cat"
+                  class="chat-placeholder"
+                >
+                  <div class="chat-info">
+                    <img :src="books_API.find(b => b.bookId === currentBook)?.bookImg" class="book-thumbnail" alt="Book cover" />
+                    <span>{{ books_API.find(b => b.bookId === currentBook)?.bookTitle + ' - ' + cat }}</span>
+                  </div>
+                  <div class="chat-actions">
+                    <button @click="createAndJoinGroup(cat)">
+                      Join
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </graffiti-discover>
           </section>
 
 
@@ -453,6 +492,11 @@
               <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" v-model="newUserForm.username" disabled>
+              </div>
+
+              <div class="form-group">
+                <label for="name">Full Name</label>
+                <input type="text" id="name" v-model="newUserForm.name">
               </div>
               
               <div class="form-group">
@@ -567,6 +611,7 @@
                         || (chatFilter==='groups'      && (o.value.object.type==='Group Chat' || o.value.object.type=== 'Custom Chat'))
                       )"
                       :key="o.value.groupChannel">
+                      <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-thumbnail" alt="Book cover" />
                         {{ o.value.groupName}} 
                         <div>
                           <button
@@ -600,16 +645,19 @@
               <div class="profile-header">
                 <img src="profile.png" class="profile-image" alt="Profile image" width="40px">
                 <div class="profile-info">
-                  <h3>{{ viewedUserProfile?.username }}</h3>
+                  <h3>{{ viewedUserProfile?.name }}</h3>
+                  <p v-if="viewedUserProfile?.username">@{{ viewedUserProfile?.username }}</p>
                   <p v-if="viewedUserProfile?.pronouns">{{ viewedUserProfile?.pronouns }}</p>
+                  
                   <follow-button
                     @click.stop
-                    :user-actor="viewedUserProfile?.actor"
-                    :current-user-actor="$graffitiSession.value?.actor"
+                    :user-actor="viewedUserProfile.actor"
+                    :current-user-actor="$graffitiSession.value.actor"
                     :is-following-function="isFollowing"
                     :follow-function="followUser"
                     :unfollow-function="unfollowUser"
-                  />
+                  ></follow-button>
+                  <button @click="createDirectMessage(viewedUserProfile.actor)">Message</button>
                 </div>
               </div>
           

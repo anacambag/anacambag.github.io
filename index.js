@@ -46,6 +46,7 @@ createApp({
       navigationStack: [],
       chatListUser: null,
       viewedUserProfileChatCount: 0,
+      googleBooksQuery: '',
     };
   },
   watch: {
@@ -61,9 +62,7 @@ createApp({
         
         if (this.isFirstLogin) {
           this.currentView = 'registration';
-        } else {
-          console.log('trying to load user profile');
-          
+        } else {          
           await this.loadUserProfile(session);
         }
         
@@ -71,7 +70,7 @@ createApp({
         await this.loadFollowedUsers();
         await this.loadFollowerCounts();
         await this.loadAllFollowers();
-        await this.sendInfoToClass();
+        // await this.sendInfoToClass();
         
         this.loadBookListAndBootstrap(session)
           .then(() => this.bootstrapGroupChats(session))
@@ -88,13 +87,9 @@ createApp({
       let isFirstTime = true;
       try {
         const schema = {};
-        for await (const msg of this.$graffiti.discover(['booksms:users'], schema)) {
-          console.log('PRINTING USERS', msg.object.actor);
-          console.log('ACTOR', session.actor);
-     
+        for await (const msg of this.$graffiti.discover(['booksms:users'], schema)) {     
           if (msg.object.actor === session.actor) {
             isFirstTime = false;
-            console.log('making it false');
             break;
           }
         }
@@ -113,6 +108,7 @@ createApp({
       try {
         const userProfile = {
           username: this.newUserForm.username,
+          name: this.newUserForm.name,
           pronouns: this.newUserForm.pronouns,
           bio: this.newUserForm.bio,
           profileImg: this.newUserForm.profileImg,
@@ -146,7 +142,6 @@ createApp({
         const schema = {};
         for await (const msg of this.$graffiti.discover(['booksms:users'], schema)) {
           if (msg.object.actor === session.actor) {
-            console.log('finding the user profile', msg);
             this.userProfile = msg.object.value.profile;
             break;
           }
@@ -164,7 +159,6 @@ createApp({
         for await (const msg of this.$graffiti.discover(['booksms:users'], schema)) {
      
           if (msg.object.actor !== this.$graffitiSession.value?.actor) {
-            console.log('pushing this actor to users', msg);
             users.push({
               actor: msg.object.actor,
               profile: msg.object.value.profile,
@@ -174,7 +168,6 @@ createApp({
         }
         
         this.users = users;
-        console.log("THIS USERS", this.users);
       } catch (err) {
         console.error("Error loading users:", err);
       }
@@ -206,12 +199,12 @@ createApp({
         for await (const msg of this.$graffiti.discover([`${this.userChannel}:follows`], {})) {
           
           if (msg.object.value.followedActor === userActor) {
-            console.log('unfollowing user', msg.object.url);
+
             await this.$graffiti.delete(msg.object.url, this.$graffitiSession.value);
             this.followedUsers.delete(userActor);
             await this.loadFollowerCounts();
             await this.loadAllFollowers();
-            console.log('followed users', this.followedUsers);
+
             break;
           }
         }
@@ -243,6 +236,7 @@ createApp({
     
       const updatedProfile = {
         username: this.userProfile.username,
+        name: this.userProfile.name,
         pronouns: this.userProfile.pronouns,
         bio: this.userProfile.bio,
         profileImg: this.userProfile.profileImg,
@@ -255,7 +249,7 @@ createApp({
         const iterator = this.$graffiti.discover(['booksms:users'], {});
         for await (const msg of iterator) {
           if (msg.object.actor === this.$graffitiSession.value?.actor) {
-            console.log('URL', msg);
+
             await this.$graffiti.patch(
               {
                 value: [
@@ -369,15 +363,15 @@ createApp({
     getUsernameForActor(actor) {
       // If it's the current user
       if (actor === this.userChannel && this.userProfile) {
-        return this.userProfile.username;
+        return this.userProfile.name;
       }
     
       if (this.viewedUserProfile && actor === this.viewedUserProfile.actor) {
-        return this.viewedUserProfile.username;
+        return this.viewedUserProfile.name;
       }
     
       const user = this.users.find(u => u.actor === actor);
-      return user?.profile?.username || actor;
+      return user?.profile?.name || actor;
     },
 
     async loadAllFollowers() {
@@ -409,8 +403,6 @@ createApp({
             console.error(`Error loading follows for ${user.actor}:`, err);
           }
         }
-        
-        console.log("Loaded all follow relationships:", this.allFollowRelationships);
       } catch (err) {
         console.error("Error loading all followers:", err);
       }
@@ -441,15 +433,45 @@ createApp({
       for await (const msg of this.$graffiti.discover(['booksms:catalog'], schema)) {
         results.push(msg);
       }
-      console.log('Found catalog entries:', results.length);
-      console.log(results);
       return results;
+    },
+
+    async fetchBooksFromGoogleAPI() {
+      const query = this.googleBooksQuery.trim();
+      if (!query) {
+        this.books_API = [];
+        return;
+      }
+    
+      try {
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10`);
+        const data = await res.json();
+    
+        this.books_API = (data.items || []).map(item => {
+          const info = item.volumeInfo;
+          return {
+            bookId: item.id,
+            bookTitle: info.title || "Untitled",
+            bookImg: info.imageLinks?.thumbnail || '',
+            bookPlot: info.description || 'No description available.',
+            bookRating: info.averageRating || 'N/A'
+          };
+        });
+      } catch (err) {
+        console.error("Google Books API error:", err);
+      }
+    },
+
+    selectFetchedBook(book) {
+      this.currentBook = book.bookId;
+
+      this.addBooks(this.$graffitiSession.value, book);
+      this.navigateTo('bookRoom');
     },
 
     async bootstrapCatalog(session) {
       // existing catalog entries
       const existing = await this.fetchAllCatalogBooks();
-      console.log('EXISTING', existing);
       const existingIds = new Set(
         existing.map(o => o.object.value.object.bookId)
       );
@@ -466,23 +488,37 @@ createApp({
     },
 
     async addBooks(session, opts) {
-      const meta = {
-        type:       'BookMetadata',
-        channel:    opts.bookId,      // the isbn number like this --> "9780439023481" :)
-        bookId:     opts.bookId,
-        bookTitle:  opts.bookTitle,
-        bookImg:    opts.bookImg,
-        bookPlot:   opts.bookPlot,
-        bookRating: opts.bookRating
-      };
-
-      await this.$graffiti.put(
-        {
-          value:    { activity: 'Create', object: meta },
-          channels: ['booksms:catalog']
-        },
-        session
-      );
+      try {
+        const schema = {};
+        for await (const msg of this.$graffiti.discover(['booksms:catalog'], schema)) {
+          if (msg.object.value.object.bookId === opts.bookId) {
+            console.log(`${opts.bookTitle} already exists in catalog.`);
+            return; 
+          }
+        }
+    
+        const meta = {
+          type:       'BookMetadata',
+          channel:    opts.bookId,
+          bookId:     opts.bookId,
+          bookTitle:  opts.bookTitle,
+          bookImg:    opts.bookImg,
+          bookPlot:   opts.bookPlot,
+          bookRating: opts.bookRating
+        };
+    
+        await this.$graffiti.put(
+          {
+            value:    { activity: 'Create', object: meta },
+            channels: ['booksms:catalog']
+          },
+          session
+        );
+    
+        console.log(`Book ${opts.bookTitle} added to catalog.`);
+      } catch (err) {
+        console.error("Error adding book to catalog:", err);
+      }
     },
     
     async fetchAllGroupChats() {
@@ -495,15 +531,12 @@ createApp({
       )) {
         results.push(msg);
       }
-      console.log('groups', results)
       return results;
     },
 
     
     async bootstrapGroupChats(session) {
       const existing = await this.fetchAllGroupChats();
-
-      console.log('existing', existing);
       const existingChans = new Set(
         existing.map(o => o.object.value.object.channel)
       );
@@ -551,14 +584,13 @@ createApp({
     },
 
     isJoinedGroup(channel) {
-
-        console.log('JOINED', channel);
         return this.joinedGroupRecords.has(channel);
       },
 
 
     async joinGroup(g) {
         const chan = g.value.object.channel;
+        console.log('INFO IS NOT GETTING COMPLETE HERE WHYYYY',g);
 
       
         const joinRec = {
@@ -744,7 +776,6 @@ createApp({
           chat.bookRating = opts.bookRating
           chat.category   = opts.category
         }
-      
         await this.$graffiti.put(
           {
             value:    { activity: 'Create', object: chat },
@@ -793,12 +824,80 @@ createApp({
       this.backToBookSpecificList();
     },
 
+    async createDirectMessage(targetUser) {
+      try {
+        const participants = [this.userChannel, targetUser].sort(); 
+        const channelId = `dm-${participants[0]}-${participants[1]}`;
+        
+        let existingDM = null;
+        for await (const group of this.$graffiti.discover([this.userChannel], {})) {
+          if (group.object.value.groupChannel && 
+              group.object.value.groupChannel.startsWith('dm-') &&
+              ((group.object.value.participants && group.object.value.participants.includes(targetUser)) ||
+               group.object.value.groupChannel === channelId)) {
+                existingDM = group;
+                break;
+          }
+        }
+        
+        if (existingDM) {
+          this.selectGroup(existingDM.object);
+          return;
+        }
+        
+        const chat = {
+          type: 'Direct Message',
+          name: `${this.userChannel}-${targetUser}`,
+          channel: channelId,
+          participants: participants,
+          createdAt: Date.now()
+        };
+        
+        
+        let joinRec = {
+          value: {
+            groupChannel: channelId,
+            object: chat,
+            groupName: `${this.getUsernameForActor(targetUser)}`,
+            joinedAt: Date.now(),
+            participants: participants
+          }
+        };
+        
+        await this.$graffiti.put(
+          { value: joinRec.value, channels: [this.userChannel] },
+          this.$graffitiSession.value
+        );
+
+        joinRec.value.groupName = `${this.getUsernameForActor(this.userChannel)}`;
+        
+        // put for secondary user
+
+        await this.$graffiti.put(
+          { value: joinRec.value, channels: [targetUser] },
+          this.$graffitiSession.value
+        );
+
+        this.selectGroup({
+          value: {
+            object: {
+              channel: channelId,
+              name: `${this.getUsernameForActor(targetUser)}`
+            }
+          }
+        });
+        
+      } catch (err) {
+        console.error("Error creating direct message:", err);
+        alert("Failed to create direct message. Please try again.");
+      }
+    },
+
     selectBook(bookObj) {
       this.currentBook = bookObj.value.object.bookId;
       // this.currentView = "bookRoom"
       this.navigateTo('bookRoom');
-
-      
+  
     },
 
     backToBooks() {
@@ -808,11 +907,55 @@ createApp({
       this.currentBook = 'null';
     },
 
-    selectBookChats(){
-      // this.currentView = "bookChatsListRoom";
+    selectBookChats() {
       this.navigateTo('bookChatsListRoom');
     },
 
+    getMissingBookChats(existingChatObjects) {
+      const categories = ["Currently Reading", "Finished Reading", "Want to Read"];
+      const existing = existingChatObjects
+        .filter(o => o.value.object.bookId === this.currentBook)
+        .map(o => o.value.object.category);
+    
+      return categories.filter(cat => !existing.includes(cat));
+    },
+
+    async createAndJoinGroup(category) {
+      const session = this.$graffitiSession.value;
+      const bookDetails = this.books_API.find(book => book.bookId === this.currentBook);
+    
+      if (!bookDetails) {
+        alert("Book info not found.");
+        return;
+      }
+    
+      const groupChat = {
+        bookId:     bookDetails.bookId,
+        bookTitle:  bookDetails.bookTitle,
+        bookImg:    bookDetails.bookImg,
+        bookPlot:   bookDetails.bookPlot,
+        bookRating: bookDetails.bookRating,
+        category:   category,
+        type: 'Group Chat'
+      };
+    
+      await this.createGroup(session, "book", groupChat);
+      
+      // fake chat card to show like when a user wants to join but it is fake
+      const fakeObj = {
+        value: {
+          object: {
+            channel: `${bookDetails.bookId}-${category}`,
+            ...groupChat
+          },
+          groupChannel: `${bookDetails.bookId}-${category}`,
+          groupName: `${bookDetails.bookTitle} - ${category}`
+        }
+      };
+    
+      await this.joinGroup(fakeObj);
+    },
+    
     backToBookProfile() {
       // this.currentView = "bookRoom"
       this.navigateTo('bookRoom');
@@ -909,31 +1052,32 @@ createApp({
       await this.$graffiti.logout(this.$graffitiSession.value);
       location.reload(); 
     },
+    
 
-    async sendInfoToClass(){
+    // async sendInfoToClass(){
 
-      await this.$graffiti.put(
-        {
-          value: {
-            name: "Ana Camba Gomes",
-            generator: "https://anacambag.github.io/",
-            describes: this.userChannel,
-          },
-          channels: [
-            "designftw-2025-studio1",
-          ],
-        },
-        this.$graffitiSession.value
-      );
+    //   await this.$graffiti.put(
+    //     {
+    //       value: {
+    //         name: "Ana Camba Gomes",
+    //         generator: "https://anacambag.github.io/",
+    //         describes: this.userChannel,
+    //       },
+    //       channels: [
+    //         "designftw-2025-studio1",
+    //       ],
+    //     },
+    //     this.$graffitiSession.value
+    //   );
 
-    },
+    // },
 
     
   },  
 })
   .component('follow-button', FollowButton)
   .use(GraffitiPlugin, {
-    // graffiti: new GraffitiLocal(),
-    graffiti: new GraffitiRemote(),
+    graffiti: new GraffitiLocal(),
+    // graffiti: new GraffitiRemote(),
   })
   .mount("#app");
