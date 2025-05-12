@@ -107,23 +107,6 @@ button.secondary:hover {
   background-color: rgb(105, 12, 12);
 }
 
-.navButton {
-  background-color: #6366f1;
-  flex: 1;
-  padding: 0.75rem 1rem;
-  font-weight: 700;
-}
-
-/* cambia este color para que los botones sean diferentes */
-.navButton:hover {
-  background-color: #4f46e5;
-}
-
-.navButton.active {
-  background-color: #3730a3;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
 input, textarea, select {
   border: 1px solid #e5e7eb;
   border-radius: 6px;
@@ -155,6 +138,35 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+.navButton {
+  background: none;
+  flex: 1;
+  padding: 0.75rem 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #555;
+  transition: color 0.2s ease;
+}
+
+.navButton:hover {
+  background-color: #7872e83a;
+}
+
+.navButton.active {
+  color: #000;
+  /* background-color: rgb(207, 207, 207); */
+  background-color: #c5c4e5d4;
+}
+
+.navButton .nav-icon {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 0.25rem;
+  transition: filter 0.2s ease;
 }
 
 section {
@@ -751,4 +763,57 @@ button.following:hover {
   gap: 1rem;
   flex-wrap: wrap;
   margin-top: 1rem;
+}
+
+.message-item {
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+  word-break: break-word;
+}
+
+.message-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.message-options {
+  position: relative;
+  font-size: 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1;
+}
+
+.message-actions-dropdown {
+  position: absolute;
+  top: 120%;
+  right: 0;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  min-width: 100px;
+}
+
+.message-actions-dropdown button {
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  text-align: left;
+  font-size: 0.85rem;
+  color: #333;
+  width: 100%;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.message-actions-dropdown button:hover {
+  background-color: #f3f4f6;
 }

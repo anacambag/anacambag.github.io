@@ -47,6 +47,10 @@ createApp({
       chatListUser: null,
       viewedUserProfileChatCount: 0,
       googleBooksQuery: '',
+      activeDropdownMessageId: null,
+      searchQueryChats: '',
+      searchQueryUsers: '',
+      searchQueryBooks: '',
     };
   },
   watch: {
@@ -886,6 +890,12 @@ createApp({
             }
           }
         });
+
+        this.getUserChatCount(targetUser).then(count => {
+          this.viewedUserProfileChatCount = count;
+        });
+        
+        this.loadJoinedGroups();
         
       } catch (err) {
         console.error("Error creating direct message:", err);
@@ -1038,10 +1048,23 @@ createApp({
       let count = 0;
       try {
         for await (const msg of this.$graffiti.discover([actor], {})) {
-          if (msg.object.value.groupChannel) {
+          const obj = msg.object.value;
+
+          if (!obj.groupChannel || !obj.object?.type) continue;
+
+          const type = obj.object.type;
+          const participants = obj.object.participants || [];
+
+          // this is to count group chats
+          if (type === 'Group Chat' || type === 'Custom Chat') {
+            count++;
+          }
+          // this is to count the direct messages only if current user is part of the chat
+          else if (type === 'Direct Message' && participants.includes(this.userChannel)) {
             count++;
           }
         }
+        
       } catch (err) {
         console.error(`Failed to get chat count for ${actor}:`, err);
       }
@@ -1077,7 +1100,7 @@ createApp({
 })
   .component('follow-button', FollowButton)
   .use(GraffitiPlugin, {
-    // graffiti: new GraffitiLocal(),
-    graffiti: new GraffitiRemote(),
+    graffiti: new GraffitiLocal(),
+    // graffiti: new GraffitiRemote(),
   })
   .mount("#app");

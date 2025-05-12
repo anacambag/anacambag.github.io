@@ -29,20 +29,23 @@
             </template>
             <nav class="main-nav">
                 <button @click="currentView = 'chats'" class="navButton" :class="{ active: currentView === 'chats' }" :disabled="isFirstLogin">
-                  Chats
+                  <img src="message.webp" alt="Chats" class="nav-icon" />
+                  <span>Chats</span>
                 </button>
                 <button @click="currentView = 'search'" class="navButton" :class="{ active: currentView === 'search' }" :disabled="isFirstLogin">
-                  Book Search
+                  <img src="book_search.png" alt="book search" class="nav-icon" />
+                  <span>Book Search</span>
                 </button>
                 <button @click="currentView = 'community'" class="navButton" :class="{ active: currentView === 'community' }" :disabled="isFirstLogin">
-                  Community
+                  <img src="community.png" alt="community" class="nav-icon" />
+                  <span>Community</span>
                 </button>
                 <button @click="goToProfile" class="navButton" :class="{ active: currentView === 'profile' }" :disabled="isFirstLogin">
-                  Profile
+                  <img src="profile_nav.png" alt="profile" class="nav-icon" />
+                  <span>Profile</span>
                 </button>
 
-                <!-- <button @click="logAll">Refresh and Log designftw Data</button> -->
-              </nav>
+            </nav>
             <h1>BookSMS</h1>
             <!-- <div id="wave"></div> -->
             
@@ -76,6 +79,11 @@
                       :class="{ active: chatFilter === 'groups' }"
                     >Groups</button>
                   </div>
+                  <input
+                    v-model="searchQueryChats"
+                    placeholder="Search your chats..."
+                    style="margin-bottom: 1rem; padding: 0.5rem; width: 100%; border: 1px solid #ccc; border-radius: 4px;"
+                  />
                   <graffiti-discover
                     v-slot="{ objects }"
                     :channels="[userChannel]"
@@ -97,7 +105,7 @@
                         chatFilter === 'all'
                         || (chatFilter==='individuals' && o.value.object.type==='Direct Message')
                         || (chatFilter==='groups'      && (o.value.object.type==='Group Chat' || o.value.object.type=== 'Custom Chat'))
-                      )"
+                      ).filter(o => o.value.groupName.toLowerCase().includes(searchQueryChats.toLowerCase()))"
                       :key="o.value.groupChannel">
                       <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-thumbnail" alt="Book cover" />
                       <img v-if="o.value.object.type==='Direct Message'" src="profile.png" class="user-avatar" alt="User avatar" width="40px">
@@ -109,6 +117,8 @@
                         
                       </li>
                     </ul>
+
+                    <p v-if="objects.length === 0"> Not part of any chats yet. Browse through community and start a conversation! 😊 </p>
                   </graffiti-discover>
                 </div>
             </section>
@@ -167,9 +177,20 @@
                     <div v-if="users.length === 0" class="no-results">
                       <p>No other users found.</p>
                     </div>
+
+                    <input
+                      v-if="users.length > 0"
+                      v-model="searchQueryUsers"
+                      placeholder="Search for users..."
+                      style="margin-bottom: 1rem; padding: 0.5rem; width: 100%; border: 1px solid #ccc; border-radius: 4px;"
+                    />
                     
-                    <ul v-else class="users-grid">
-                      <li v-for="user in users" :key="user.actor" class="user-card" @click="viewUserProfile_func(user.actor)">
+                    <ul
+                      v-if="users.length > 0"
+                      class="users-grid"
+                    >
+                      <li v-for="user in users.filter(u =>
+                        u.profile.name.toLowerCase().includes(searchQueryUsers.toLowerCase()))" :key="user.actor" class="user-card" @click="viewUserProfile_func(user.actor)">
                         <div class="user-card-header">
                           <img src="profile.png" class="user-avatar" alt="User avatar" width="40px">
                           <div class="user-card-info">
@@ -199,12 +220,18 @@
                         <button @click="deleteMessage($graffitiSession.value, user.url)">delete</button> -->
                       </li>
                     </ul>
+                    <!-- <p v-else>No users found.</p> -->
                   </div>
                 </transition>
 
                 <transition name="slide-left" mode="out-in">      
                     <!-- Books in app -->
                   <div v-if="communityTab === 'books'">
+                    <input
+                      v-model="searchQueryBooks"
+                      placeholder="Search for book chats..."
+                      style="margin-bottom: 1rem; padding: 0.5rem; width: 100%; border: 1px solid #ccc; border-radius: 4px;"
+                    />
                     
                     <graffiti-discover
                       v-slot="{ objects }"
@@ -212,7 +239,11 @@
                       :schema="{}"
                     >
                       <ul>
-                        <li v-for="g of objects">
+                        <li v-for="g of objects.filter(g =>
+                          (g.value.object.bookTitle + ' - ' + g.value.object.category)
+                          .toLowerCase()
+                          .includes(searchQueryBooks.toLowerCase())
+                        )">
                           <img v-if="g.value.object.bookImg" :src="g.value.object.bookImg" class="book-thumbnail" alt="Book cover" />
                           <span>{{ g.value.object.bookTitle +' - ' + g.value.object.category }}</span>
                           <div>
@@ -361,20 +392,35 @@
                         v-for="message of messageObjects.sort((a, b) => a.value.published - b.value.published)"
                         :key="message.url"
                         :class="{
+                          'message-item': true,
                           'my-message': message.actor === $graffitiSession.value?.actor,
                           'other-message': message.actor !== $graffitiSession.value?.actor
                         }"
                       >
-                        <div class="message-info">
-                          <strong>{{ message.actor === $graffitiSession.value?.actor ? 'You' : message.actor }}</strong>
-                          <span class="message-time">{{ formatTime(message.value.published) }}</span>
+                        <div class="message-header">
+                          <div style="margin-right: 5px;">
+                            <strong>{{ getUsernameForActor(message.actor) }} </strong>
+                            <span> - </span>
+                            <span class="message-time">  {{ formatTime(message.value.published) }}</span>
+                          </div>
+                          
+                          <div
+                            v-if="message.actor === $graffitiSession.value?.actor"
+                            class="message-options"
+                            @click="activeDropdownMessageId = activeDropdownMessageId === message.url ? null : message.url"
+                          >
+                             ⋯
+                            <div
+                              v-if="activeDropdownMessageId === message.url"
+                              class="message-actions-dropdown"
+                              @click.stop
+                            >
+                              <button @click="editMessagePrompt(message)">Edit</button>
+                              <button @click="deleteMessage($graffitiSession.value, message)">Delete</button>
+                            </div>
+                          </div>
                         </div>
                         <div class="message-content">{{ message.value.content }}</div>
-                        
-                        <div v-if="message.actor === $graffitiSession.value?.actor" class="message-actions">
-                          <button @click="editMessagePrompt(message)">Edit</button>
-                          <button @click="deleteMessage($graffitiSession.value, message)">Delete</button>
-                        </div>
                       </li>
                     </ul>
                     <p v-else>No messages yet. Be the first to start the conversation!</p>
@@ -605,11 +651,17 @@
                     }"
                   >
                     <ul>
-                      <li v-for="o of objects.filter(o =>
-                        chatFilter === 'all'
-                        || (chatFilter==='individuals' && o.value.object.type==='Direct Message')
-                        || (chatFilter==='groups'      && (o.value.object.type==='Group Chat' || o.value.object.type=== 'Custom Chat'))
-                      )"
+                      <li v-for="o of objects.filter(o => {
+                        const type = o.value.object.type;
+                        const isGroup = type === 'Group Chat' || type === 'Custom Chat';
+                        const isDirect = type === 'Direct Message';
+                        const participants = o.value.object.participants || [];
+
+                        if (isGroup) return true;
+                        if (isDirect && participants.includes($graffitiSession.value?.actor)) return true;
+                      
+                        return false;
+                      })"
                       :key="o.value.groupChannel">
                       <img v-if="o.value.object.bookImg" :src="o.value.object.bookImg" class="book-thumbnail" alt="Book cover" />
                         {{ o.value.groupName}} 
